@@ -14,6 +14,7 @@
         <p>
             <button onclick="pause()">Pause</button>
             <button onclick="resume()">Resume</button>
+            <button onclick="cancel()">Cancel</button>
         </p>
         <p>
             <progress id="uploading_progress" value="0" max="100"></progress>
@@ -36,6 +37,11 @@
 
                 function resume() {
                     s3upload.resume();
+                }
+
+                function cancel() {
+                    s3upload.cancel();
+                    s3upload = null;
                 }
 
                 function upload(user, pass) {

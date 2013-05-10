@@ -92,6 +92,18 @@ switch ($command) {
             ));
             break;
         }
+    case 'abortmultipartupload': {
+            $model = $client->abortMultipartUpload(array(
+                'Bucket' => BUCKET_NAME,
+                'Key' => $_REQUEST['sendBackData']['key'],
+                'UploadId' => $_REQUEST['sendBackData']['uploadId']
+            ));
+
+            sendJson(array(
+                'success' => true
+            ));
+            break;
+        }
     default: {
             header(' ', true, 404);
             die('Command not understood');

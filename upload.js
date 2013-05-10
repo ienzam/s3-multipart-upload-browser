@@ -4,6 +4,7 @@
  * To start uploading, call start()
  * You can pause with pause()
  * Resume with resume()
+ * Cancel with cancel()
  *
  * You can override the following functions (no event emitter :( , description below on the function definition, at the end of the file)
  * onServerError = function(command, jqXHR, textStatus, errorThrown) {}
@@ -112,7 +113,8 @@ function S3MultiUpload(file, otheInfo) {
                 self.uploadingSize = 0;
                 if (request.status !== 200) {
                     self.updateProgressBar();
-                    if(!self.isPaused) self.onS3UploadError(request);
+                    if (!self.isPaused)
+                        self.onS3UploadError(request);
                     return;
                 }
                 self.uploadedSize += self.curUploadInfo.blob.size;
@@ -140,10 +142,10 @@ function S3MultiUpload(file, otheInfo) {
      * that part will start from beginning (< 5MB of uplaod is wasted)
      */
     this.pause = function() {
+        this.isPaused = true;
         if (this.uploadXHR !== null) {
             this.uploadXHR.abort();
         }
-        this.isPaused = true;
     };
 
     /**
@@ -155,6 +157,17 @@ function S3MultiUpload(file, otheInfo) {
         this.uploadPart(this.curUploadInfo.partNum);
     };
 
+    this.cancel = function() {
+        var self = this;
+        self.pause();
+        $.get(self.SERVER_LOC, {
+            command: 'AbortMultipartUpload',
+            sendBackData: self.sendBackData
+        }).done(function(data) {
+
+        });
+    };
+
     this.waitRetry = function() {
         var self = this;
         window.setTimeout(function() {
@@ -163,7 +176,7 @@ function S3MultiUpload(file, otheInfo) {
     };
 
     this.retry = function() {
-        if (!this.isPaused) {
+        if (!this.isPaused && self.uploadXHR === null) {
             this.uploadPart(this.curUploadInfo.partNum);
         }
     };
