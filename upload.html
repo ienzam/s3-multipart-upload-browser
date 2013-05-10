@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Upload To S3</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <script type="text/javascript" src="firebug-lite/build/firebug-lite.js#startOpened"></script>
+    </head>
+    <body>
+        <p>
+            Select file and press upload<input type="file" id="file">
+            <button onclick="upload('user', 'pass')">Upload</button>
+            <button onclick="upload('user', 'pass1')">Not authorized Upload</button>
+        </p>
+        <p>
+            <button onclick="pause()">Pause</button>
+            <button onclick="resume()">Resume</button>
+        </p>
+        <p>
+            <progress id="uploading_progress" value="0" max="100"></progress>
+            <- Uploading Progress Bar
+            <br>
+            <progress id="uploaded_progress" value="0" max="100"></progress>
+            <- Uploaded Progress Bar
+            <br>
+            <progress id="summed_progress" value="0" max="100"></progress>
+            <- Uploading + Uploaded Progress Bar
+        </p>
+        <script src="jquery-1.9.1.min.js"></script>
+        <script src="upload.js"></script>
+        <script>
+                var s3upload = null;
+
+                function pause() {
+                    s3upload.pause();
+                }
+
+                function resume() {
+                    s3upload.resume();
+                }
+
+                function upload(user, pass) {
+                    if (!(window.File && window.FileReader && window.FileList && window.Blob && window.Blob.prototype.slice)) {
+                        alert("Sorry! You are using an older or unsupported browser. Please update your browser");
+                        return;
+                    }
+
+                    if (s3upload != null) {
+                        alert("Though it is possible to upload multiple files at once, this demonstration does not allowed to do so to demonstrate pause and resume in a simple manner. Sorry :-(");
+                        return;
+                    }
+
+                    var file = $('#file')[0].files[0];
+                    s3upload = new S3MultiUpload(file, {user: user, pass: pass});
+
+                    s3upload.onServerError = function(command, jqXHR, textStatus, errorThrown) {
+                        if (jqXHR.status === 403) {
+                            alert("Sorry you are not allowed to upload");
+                        } else {
+                            console.log("Our server is not responding correctly");
+                        }
+                    };
+
+                    s3upload.onS3UploadError = function(xhr) {
+                        s3upload.waitRetry();
+                        alert("Upload is failing, we will retry in " + s3upload.RETRY_WAIT_SEC + " seconds");
+                    };
+
+                    s3upload.onProgressChanged = function(uploadingSize, uploadedSize, totalSize) {
+                        $('#uploading_progress').attr('value', uploadingSize);
+                        $('#uploading_progress').attr('max', totalSize);
+
+                        $('#uploaded_progress').attr('value', uploadedSize);
+                        $('#uploaded_progress').attr('max', totalSize);
+
+                        $('#summed_progress').attr('value', uploadedSize + uploadingSize);
+                        $('#summed_progress').attr('max', totalSize);
+                    };
+
+                    s3upload.onUploadCompleted = function() {
+                        alert("Congratz, upload is complete now");
+                    };
+
+                    s3upload.start();
+                }
+        </script>
+    </body>
+</html>

@@ -1,0 +1,5 @@
+<?php
+
+define('AWS_KEY', 'YOUR KEY HERE');
+define('AWS_SECRET', 'YOUR SECRET HERE');
+define('BUCKET_NAME', 'THE BUCKET YOU WANT TO USE');

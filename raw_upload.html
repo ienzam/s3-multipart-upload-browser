@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>S3 Upload - Raw Javascript</title>
+        <script type="text/javascript" src="firebug-lite/build/firebug-lite.js#startOpened"></script>
+    </head>
+    <body>
+        <p><input type="file" id="file"><button onclick="upload()">Upload</button></p>
+        <progress id="progress" value="0" max="100"></progress>
+        <script src="jquery-1.9.1.min.js"></script>
+        <script>
+            var sendBackData;
+            var partSize = 5 * 1024 * 1024; // constant
+            var totalSize;
+            var sureUploadSize = 0, probableUplaodSize = 0;
+            var numParts;
+            var partsLeft = [];
+            var file;
+            function updateProgressBar() {
+                $('#progress').attr('max', totalSize);
+                $('#progress').attr('value', sureUploadSize + probableUplaodSize);
+            }
+
+            function completeMultipartUpload() {
+                $.ajax({
+                    url: 'server.php',
+                    data: {
+                        command: 'CompleteMultipartUpload',
+                        sendBackData: sendBackData
+                    }
+                }).done(function(data, textStatus, jqXHR) {
+                    console.log(data, textStatus, jqXHR);
+                    alert("File uploaded successfully");
+                });
+            }
+
+            function uploadPart(partNum) {
+
+                console.log("Uploading part " + partNum);
+
+                if (partNum > numParts) {
+                    completeMultipartUpload();
+                    return;
+                }
+
+                var start = (partNum - 1) * partSize;
+                var end = start + partSize;
+                if (end > totalSize)
+                    end = totalSize;
+                var length = end - start;
+                var curBlobPart = file.slice(start, end);
+                $.ajax({
+                    url: 'server.php',
+                    data: {
+                        command: 'SignUploadPart',
+                        partNumber: partNum,
+                        contentLength: length,
+                        sendBackData: sendBackData
+                    }
+                }).done(function(data, textStatus, jqXHR) {
+                    console.log(data, textStatus, jqXHR);
+                    var url = data['url'];
+                    var authHeader = data['authHeader'];
+                    var dateHeader = data['dateHeader'];
+                    var request = new XMLHttpRequest();
+                    request.open('PUT', url, true);
+                    request.contentLength = length;
+                    request.onreadystatechange = function() {
+                        if (request.readyState === 4) {
+                            console.log(request);
+                            probableUplaodSize = 0;
+                            sureUploadSize = request.contentLength;
+                            updateProgressBar();
+                            uploadPart(partNum + 1);
+                        }
+                    };
+                    request.upload.onprogress = function(e) {
+                        if (e.lengthComputable) {
+                            probableUplaodSize = e.loaded;
+                            updateProgressBar();
+                        }
+                    };
+                    request.setRequestHeader("x-amz-date", dateHeader);
+                    request.setRequestHeader("Authorization", authHeader);
+                    request.setRequestHeader("Content-Length", length);
+                    request.send(curBlobPart);
+                });
+            }
+
+            function startPartitionAndUpload() {
+                updateProgressBar();
+                numParts = Math.ceil(totalSize / partSize);
+                uploadPart(1);
+            }
+
+            function upload() {
+                // Check for the various File API support.
+                if (window.File && window.FileReader && window.FileList && window.Blob && window.Blob.prototype.slice) {
+                    file = $('#file')[0].files[0];
+                    totalSize = file.size;
+                    $.ajax({
+                        url: 'server.php',
+                        data: {
+                            command: 'CreateMultipartUpload',
+                            fileInfo: {
+                                name: file.name,
+                                type: file.type,
+                                size: file.size,
+                                lastModifiedDate: file.lastModifiedDate
+                            },
+                            otherInfo: {
+                                user: 'user',
+                                pass: 'pass'
+                            }
+                        }
+                    }).done(function(data, textStatus, jqXHR) {
+                        console.log(data, textStatus, jqXHR);
+                        sendBackData = data;
+                        startPartitionAndUpload();
+                    });
+                } else {
+                    alert('The File APIs are not fully supported in this browser.');
+                }
+            }
+        </script>
+    </body>
+</html>
