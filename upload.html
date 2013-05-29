@@ -73,13 +73,13 @@
 
                     s3upload.onProgressChanged = function(uploadingSize, uploadedSize, totalSize) {
                         $('#uploading_progress').attr('value', uploadingSize);
-                        $('#uploading_progress').attr('max', totalSize);
+                        // $('#uploading_progress').attr('max', totalSize);
 
                         $('#uploaded_progress').attr('value', uploadedSize);
-                        $('#uploaded_progress').attr('max', totalSize);
+                        // $('#uploaded_progress').attr('max', totalSize);
 
                         $('#summed_progress').attr('value', uploadedSize + uploadingSize);
-                        $('#summed_progress').attr('max', totalSize);
+                        // $('#summed_progress').attr('max', totalSize);
                     };
 
                     s3upload.onUploadCompleted = function() {
