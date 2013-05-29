@@ -80,3 +80,9 @@ License
 Actually you can think of this code on public domain :P
 Just a mention or gratitude of this work is enough :)
 (not needed at all though)
+
+Contributors
+------------
+@thecolorblue - Brad Davis - https://github.com/thecolorblue
+
+@ienzam - Md. Enzam Hossain - https://github.com/ienzam
