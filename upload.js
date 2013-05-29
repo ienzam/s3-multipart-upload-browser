@@ -45,9 +45,11 @@ function S3MultiUpload(file, otheInfo) {
         this.log = function() {
         };
     }
+}
+
 
     /** private */
-    this.createMultipartUpload = function() {
+    S3MultiUpload.prototype.createMultipartUpload = function() {
         var self = this;
         $.get(self.SERVER_LOC, {
             command: 'CreateMultipartUpload',
@@ -65,12 +67,12 @@ function S3MultiUpload(file, otheInfo) {
      * Call this function to start uploading to server
      *
      */
-    this.start = function() {
+    S3MultiUpload.prototype.start = function() {
         this.uploadPart(0);
     };
 
     /** private */
-    this.uploadPart = function(partNum) {
+    S3MultiUpload.prototype.uploadPart = function(partNum) {
         var blobs = this.blobs = [], promises = [];
         var start = 0;
         var end, blob;
@@ -89,7 +91,7 @@ function S3MultiUpload(file, otheInfo) {
         while(start < this.file.size) {
             start = this.PART_SIZE * this.curUploadInfo.partNum++;
             end = Math.min(start + this.PART_SIZE, this.file.size);
-            blobs.push(file.slice(start, end));
+            blobs.push(this.file.slice(start, end));
         }
 
         for (var i = 0; i < blobs.length; i++) {
@@ -108,7 +110,7 @@ function S3MultiUpload(file, otheInfo) {
          .then(this.sendAll.bind(this), this.onServerError);
     };
 
-    this.sendAll = function() {
+    S3MultiUpload.prototype.sendAll = function() {
         var blobs = this.blobs;
         var length = blobs.length;
         for (var i = 0; i < length; i++) {
@@ -117,7 +119,7 @@ function S3MultiUpload(file, otheInfo) {
         }
     };
     /** private */
-    this.sendToS3 = function(data, blob, index) {
+    S3MultiUpload.prototype.sendToS3 = function(data, blob, index) {
         var self = this;
         var url = data['url'];
         var size = blob.size;
@@ -156,7 +158,7 @@ function S3MultiUpload(file, otheInfo) {
      * Remember, the current progressing part will fail,
      * that part will start from beginning (< 5MB of uplaod is wasted)
      */
-    this.pause = function() {
+    S3MultiUpload.prototype.pause = function() {
         this.isPaused = true;
         if (this.uploadXHR !== null) {
             this.uploadXHR.abort();
@@ -167,12 +169,12 @@ function S3MultiUpload(file, otheInfo) {
      * Resumes the upload
      *
      */
-    this.resume = function() {
+    S3MultiUpload.prototype.resume = function() {
         this.isPaused = false;
         this.uploadPart(this.curUploadInfo.partNum);
     };
 
-    this.cancel = function() {
+    S3MultiUpload.prototype.cancel = function() {
         var self = this;
         self.pause();
         $.get(self.SERVER_LOC, {
@@ -183,21 +185,21 @@ function S3MultiUpload(file, otheInfo) {
         });
     };
 
-    this.waitRetry = function() {
+    S3MultiUpload.prototype.waitRetry = function() {
         var self = this;
         window.setTimeout(function() {
             self.retry();
         }, this.RETRY_WAIT_SEC * 1000);
     };
 
-    this.retry = function() {
+    S3MultiUpload.prototype.retry = function() {
         if (!this.isPaused && self.uploadXHR === null) {
             this.uploadPart(this.curUploadInfo.partNum);
         }
     };
 
     /** private */
-    this.completeMultipartUpload = function() {
+    S3MultiUpload.prototype.completeMultipartUpload = function() {
         var self = this;
         $.get(self.SERVER_LOC, {
             command: 'CompleteMultipartUpload',
@@ -210,7 +212,7 @@ function S3MultiUpload(file, otheInfo) {
     };
 
     /** private */
-    this.updateProgressBar = function() {
+    S3MultiUpload.prototype.updateProgressBar = function() {
         var progress = this.progress;
         var length = progress.length;
         var total = 0;
@@ -231,7 +233,7 @@ function S3MultiUpload(file, otheInfo) {
      * @param {type} textStatus resonse text status
      * @param {type} errorThrown the error thrown by the server
      */
-    this.onServerError = function(command, jqXHR, textStatus, errorThrown) {
+    S3MultiUpload.prototype.onServerError = function(command, jqXHR, textStatus, errorThrown) {
     };
 
     /**
@@ -241,7 +243,7 @@ function S3MultiUpload(file, otheInfo) {
      *
      * @param XMLHttpRequest xhr the XMLHttpRequest object
      */
-    this.onS3UploadError = function(xhr) {
+    S3MultiUpload.prototype.onS3UploadError = function(xhr) {
         self.waitRetry();
     };
 
@@ -252,7 +254,7 @@ function S3MultiUpload(file, otheInfo) {
      * @param {type} uploadedSize is already uploaded part
      * @param {type} totalSize the total size of the uploading file
      */
-    this.onProgressChanged = function(uploadingSize, uploadedSize, totalSize) {
+    S3MultiUpload.prototype.onProgressChanged = function(uploadingSize, uploadedSize, totalSize) {
         this.log("uploadedSize = " + uploadedSize);
         this.log("uploadingSize = " + uploadingSize);
         this.log("totalSize = " + totalSize);
@@ -262,7 +264,6 @@ function S3MultiUpload(file, otheInfo) {
      * Override this method to execute something when upload finishes
      *
      */
-    this.onUploadCompleted = function(serverData) {
+    S3MultiUpload.prototype.onUploadCompleted = function(serverData) {
 
     };
-}
