@@ -37,6 +37,7 @@ function S3MultiUpload(file, otheInfo) {
         blob: null,
         partNum: 0
     };
+    this.progress = [];
 
     if (console && console.log) {
         this.log = console.log;
@@ -44,9 +45,11 @@ function S3MultiUpload(file, otheInfo) {
         this.log = function() {
         };
     }
+}
+
 
     /** private */
-    this.createMultipartUpload = function() {
+    S3MultiUpload.prototype.createMultipartUpload = function() {
         var self = this;
         $.get(self.SERVER_LOC, {
             command: 'CreateMultipartUpload',
@@ -64,76 +67,90 @@ function S3MultiUpload(file, otheInfo) {
      * Call this function to start uploading to server
      *
      */
-    this.start = function() {
+    S3MultiUpload.prototype.start = function() {
         this.uploadPart(0);
     };
 
     /** private */
-    this.uploadPart = function(partNum) {
-        var self = this;
-        self.curUploadInfo.partNum = partNum;
+    S3MultiUpload.prototype.uploadPart = function(partNum) {
+        var blobs = this.blobs = [], promises = [];
+        var start = 0;
+        var end, blob;
 
-        if (self.curUploadInfo.partNum == 0) {
-            self.createMultipartUpload();
+        this.curUploadInfo.partNum = partNum;
+
+        if (this.curUploadInfo.partNum === 0) {
+            this.createMultipartUpload();
             return;
         }
 
-        var start = (self.curUploadInfo.partNum - 1) * self.PART_SIZE;
-        if (start > self.file.size) {
-            self.completeMultipartUpload();
+        if (start > this.file.size) {
+            this.completeMultipartUpload();
             return;
         }
+        while(start < this.file.size) {
+            start = this.PART_SIZE * this.curUploadInfo.partNum++;
+            end = Math.min(start + this.PART_SIZE, this.file.size);
+            blobs.push(this.file.slice(start, end));
+        }
 
-        var end = Math.min(start + self.PART_SIZE, self.file.size);
+        for (var i = 0; i < blobs.length; i++) {
+            blob = blobs[i];
+            promises.push($.get(this.SERVER_LOC, {
+                command: 'SignUploadPart',
+                sendBackData: this.sendBackData,
+                partNumber: this.curUploadInfo.partNum,
+                contentLength: blob.size
+            }));
+        }
 
-        self.curUploadInfo.blob = file.slice(start, end);
-
-        $.get(self.SERVER_LOC, {
-            command: 'SignUploadPart',
-            sendBackData: self.sendBackData,
-            partNumber: self.curUploadInfo.partNum,
-            contentLength: self.curUploadInfo.blob.size
-        }).done(function(data) {
-            self.sendToS3(data);
-        }).fail(function(jqXHR, textStatus, errorThrown) {
-            self.onServerError('SignUploadPart', jqXHR, textStatus, errorThrown);
-        });
+        // we need to pass $.when an array of arguments
+        // so we are using .apply()
+        $.when.apply(null, promises)
+         .then(this.sendAll.bind(this), this.onServerError);
     };
 
+    S3MultiUpload.prototype.sendAll = function() {
+        var blobs = this.blobs;
+        var length = blobs.length;
+        for (var i = 0; i < length; i++) {
+            // sendToS3( XHRresponse, blob);
+            this.sendToS3(arguments[i][0], blobs[i], i);
+        }
+    };
     /** private */
-    this.sendToS3 = function(data) {
+    S3MultiUpload.prototype.sendToS3 = function(data, blob, index) {
         var self = this;
         var url = data['url'];
+        var size = blob.size;
         var authHeader = data['authHeader'];
         var dateHeader = data['dateHeader'];
         var request = self.uploadXHR = new XMLHttpRequest();
         request.onreadystatechange = function() {
             if (request.readyState === 4) {
                 self.uploadXHR = null;
-                self.uploadingSize = 0;
+                self.progress[index] = 100;
                 if (request.status !== 200) {
                     self.updateProgressBar();
                     if (!self.isPaused)
                         self.onS3UploadError(request);
                     return;
                 }
-                self.uploadedSize += self.curUploadInfo.blob.size;
+                self.uploadedSize += blob.size;
                 self.updateProgressBar();
-                self.uploadPart(self.curUploadInfo.partNum + 1);
             }
         };
 
         request.upload.onprogress = function(e) {
             if (e.lengthComputable) {
-                self.uploadingSize = e.loaded;
+                self.progress[index] = e.loaded / size;
                 self.updateProgressBar();
             }
         };
         request.open('PUT', url, true);
         request.setRequestHeader("x-amz-date", dateHeader);
         request.setRequestHeader("Authorization", authHeader);
-        request.setRequestHeader("Content-Length", length);
-        request.send(self.curUploadInfo.blob);
+        request.send(blob);
     };
 
     /**
@@ -141,7 +158,7 @@ function S3MultiUpload(file, otheInfo) {
      * Remember, the current progressing part will fail,
      * that part will start from beginning (< 5MB of uplaod is wasted)
      */
-    this.pause = function() {
+    S3MultiUpload.prototype.pause = function() {
         this.isPaused = true;
         if (this.uploadXHR !== null) {
             this.uploadXHR.abort();
@@ -152,12 +169,12 @@ function S3MultiUpload(file, otheInfo) {
      * Resumes the upload
      *
      */
-    this.resume = function() {
+    S3MultiUpload.prototype.resume = function() {
         this.isPaused = false;
         this.uploadPart(this.curUploadInfo.partNum);
     };
 
-    this.cancel = function() {
+    S3MultiUpload.prototype.cancel = function() {
         var self = this;
         self.pause();
         $.get(self.SERVER_LOC, {
@@ -168,21 +185,21 @@ function S3MultiUpload(file, otheInfo) {
         });
     };
 
-    this.waitRetry = function() {
+    S3MultiUpload.prototype.waitRetry = function() {
         var self = this;
         window.setTimeout(function() {
             self.retry();
         }, this.RETRY_WAIT_SEC * 1000);
     };
 
-    this.retry = function() {
+    S3MultiUpload.prototype.retry = function() {
         if (!this.isPaused && self.uploadXHR === null) {
             this.uploadPart(this.curUploadInfo.partNum);
         }
     };
 
     /** private */
-    this.completeMultipartUpload = function() {
+    S3MultiUpload.prototype.completeMultipartUpload = function() {
         var self = this;
         $.get(self.SERVER_LOC, {
             command: 'CompleteMultipartUpload',
@@ -195,8 +212,16 @@ function S3MultiUpload(file, otheInfo) {
     };
 
     /** private */
-    this.updateProgressBar = function() {
-        this.onProgressChanged(this.uploadingSize, this.uploadedSize, this.file.size);
+    S3MultiUpload.prototype.updateProgressBar = function() {
+        var progress = this.progress;
+        var length = progress.length;
+        var total = 0;
+        for (var i = 0; i < progress.length; i++) {
+            total = total + progress[i];
+        }
+        total = total / length;
+
+        this.onProgressChanged(this.uploadingSize, total, this.file.size);
     };
 
     /**
@@ -208,7 +233,7 @@ function S3MultiUpload(file, otheInfo) {
      * @param {type} textStatus resonse text status
      * @param {type} errorThrown the error thrown by the server
      */
-    this.onServerError = function(command, jqXHR, textStatus, errorThrown) {
+    S3MultiUpload.prototype.onServerError = function(command, jqXHR, textStatus, errorThrown) {
     };
 
     /**
@@ -218,7 +243,7 @@ function S3MultiUpload(file, otheInfo) {
      *
      * @param XMLHttpRequest xhr the XMLHttpRequest object
      */
-    this.onS3UploadError = function(xhr) {
+    S3MultiUpload.prototype.onS3UploadError = function(xhr) {
         self.waitRetry();
     };
 
@@ -229,7 +254,7 @@ function S3MultiUpload(file, otheInfo) {
      * @param {type} uploadedSize is already uploaded part
      * @param {type} totalSize the total size of the uploading file
      */
-    this.onProgressChanged = function(uploadingSize, uploadedSize, totalSize) {
+    S3MultiUpload.prototype.onProgressChanged = function(uploadingSize, uploadedSize, totalSize) {
         this.log("uploadedSize = " + uploadedSize);
         this.log("uploadingSize = " + uploadingSize);
         this.log("totalSize = " + totalSize);
@@ -239,7 +264,6 @@ function S3MultiUpload(file, otheInfo) {
      * Override this method to execute something when upload finishes
      *
      */
-    this.onUploadCompleted = function(serverData) {
+    S3MultiUpload.prototype.onUploadCompleted = function(serverData) {
 
     };
-}
